@@ -1,0 +1,5 @@
+/.venv/
+/keys/
+/images/
+/cloud-init/user-data
+/.idea/
