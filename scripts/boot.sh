@@ -1,4 +1,7 @@
-qemu-system-x86_64 \
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec qemu-system-x86_64 \
   -machine accel=tcg \
   -m 2048 \
   -smp 2 \
