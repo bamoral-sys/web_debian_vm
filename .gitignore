@@ -3,3 +3,5 @@
 /images/
 /cloud-init/user-data
 /.idea/
+/.venv-linux/
+/back/logs/
