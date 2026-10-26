@@ -1,9 +1,8 @@
 import asyncio
-import time
 
 import qemu.qmp.protocol
 from qemu.qmp import QMPClient, Message, EventListener
-from vm_manager import VMManager
+from .vm_manager import VMManager
 from pathlib import Path
 
 PATH = ""
@@ -24,14 +23,26 @@ async def connect_qmp(
                 await asyncio.sleep(0.2)
 
 
+async def watch_events(qmp: QMPClient):
+    async for event in qmp.events:
+        print("QMP event:", event)
+
 
 async def main():
-    myvm = VMManager(Path('/mnt/c/Users/motor/PycharmProjects/web_debian_vm'))
-    await myvm.start()
+    pass
+    # project_dir = Path(__file__).resolve().parents[2]
+    # vm = VMManager(project_dir)
+    # await vm.start()
+    #
+    # qmp = await connect_qmp('/tmp/debian-vm-qmp.sock')
+    #
+    # async with asyncio.timeout(5):
+    #     status = await qmp.execute("query-status")
+    #
+    # print(status)
+    #
+    # events_task = asyncio.create_task(watch_events(qmp))
 
-    qmp = await connect_qmp('/tmp/debian-vm-qmp.sock')
-    print(qmp.greeting.QMP)
 
-
-
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

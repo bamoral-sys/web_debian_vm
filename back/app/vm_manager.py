@@ -4,6 +4,8 @@ from pathlib import Path
 
 class VMManager:
     def __init__(self, project_dir: Path):
+        print("Корень проекта:", project_dir)
+        print("Диск существует:", (project_dir / "images" / "vm.qcow2").is_file())
         self.project_dir = project_dir.resolve()
 
         self.disk_path = self.project_dir / "images" / "vm.qcow2"
@@ -15,6 +17,7 @@ class VMManager:
         self.process: asyncio.subprocess.Process | None = None
 
         self._lock = asyncio.Lock()
+
 
     def is_running(self) -> bool:
         return (
