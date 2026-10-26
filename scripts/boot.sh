@@ -11,4 +11,6 @@ exec qemu-system-x86_64 \
   -device virtio-net-pci,netdev=net0,mac=52:54:00:12:34:56 \
   -chardev socket,id=serial0,path=/tmp/debian-vm-serial.sock,server=on,wait=off \
   -serial chardev:serial0 \
+  -display none \
+  -monitor none \
   -qmp unix:/tmp/debian-vm-qmp.sock,server=on,wait=off

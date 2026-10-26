@@ -1,12 +1,14 @@
 import asyncio
 
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, Request, HTTPException
+from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
 from back.app.vm_manager import VMManager
 from back.app.qmp_client import connect_qmp
+from back.app.serial_bridge import serial_to_websocket, websocket_to_serial
 
 
 @asynccontextmanager
@@ -104,3 +106,65 @@ async def vm_force_shutdown(request: Request):
         )
     await vm.force_stop()
     return {"stopped": True}
+
+
+@app.websocket("/api/vm/serial")
+async def vm_serial(websocket: WebSocket):
+    vm = websocket.app.state.vm
+
+    await websocket.accept()
+
+    if not vm.is_running():
+        await websocket.close(
+            code=1008,
+            reason="Машина не запущена"
+        )
+        return
+
+    try:
+        async with asyncio.timeout(5):
+            reader, writer = await asyncio.open_unix_connection(
+                "/tmp/debian-vm-serial.sock"
+            )
+    except (OSError, TimeoutError):
+        await websocket.close(
+            code=1011,
+            reason="Не удалось подключение к serial socket"
+        )
+        return
+
+    tasks = [
+        asyncio.create_task(serial_to_websocket(reader, websocket)),
+        asyncio.create_task(websocket_to_serial(websocket, writer)),
+    ]
+    close_code = 1000
+    close_reason = ""
+
+    try:
+        done, _ = await asyncio.wait(
+            tasks,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in done:
+            task.result()
+    except WebSocketDisconnect:
+        pass
+    except OSError:
+        close_code = 1011
+        close_reason = "Ошибка соединения с serial socket"
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        writer.close()
+        try:
+            with suppress(OSError):
+                await writer.wait_closed()
+        finally:
+            if (
+                websocket.client_state == WebSocketState.CONNECTED
+                and websocket.application_state == WebSocketState.CONNECTED
+            ):
+                with suppress(WebSocketDisconnect):
+                    await websocket.close(code=close_code, reason=close_reason)

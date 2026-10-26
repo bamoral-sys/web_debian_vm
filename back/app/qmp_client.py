@@ -5,8 +5,6 @@ from qemu.qmp import QMPClient, Message, EventListener
 from .vm_manager import VMManager
 from pathlib import Path
 
-PATH = ""
-
 
 async def connect_qmp(
         socket_path: str,
