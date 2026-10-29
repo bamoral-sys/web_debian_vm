@@ -1,14 +1,19 @@
+import asyncssh
 import asyncio
 
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
 from back.app.vm_manager import VMManager
 from back.app.qmp_client import connect_qmp
 from back.app.serial_bridge import serial_to_websocket, websocket_to_serial
+
+from back.app.ssh_client import connect_ssh
+from back.app.ssh_bridge import bridge_ssh
 
 
 @asynccontextmanager
@@ -21,7 +26,19 @@ async def lifespan(app: FastAPI):
     finally:
         await app.state.vm.force_stop()
 
+
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
+
 
 @app.get("/api/vm/status")
 async def vm_status(request: Request):
@@ -168,3 +185,54 @@ async def vm_serial(websocket: WebSocket):
             ):
                 with suppress(WebSocketDisconnect):
                     await websocket.close(code=close_code, reason=close_reason)
+
+
+@app.websocket("/api/vm/ssh")
+async def vm_ssh(websocket: WebSocket):
+    vm = websocket.app.state.vm
+
+    await websocket.accept()
+
+    if not vm.is_running():
+        await websocket.close(
+            code=1008,
+            reason="Машина не запущена",
+        )
+        return
+
+    close_code = 1000
+    close_reason = ""
+
+    try:
+        connection = await connect_ssh()
+
+        async with connection:
+            async with asyncio.timeout(10):
+                process = await connection.create_process(
+                    term_type="xterm-256color",
+                    term_size=(80, 24),
+                    encoding=None,
+                    stderr=asyncssh.STDOUT,
+                )
+
+            async with process:
+                await bridge_ssh(process, websocket)
+
+    except WebSocketDisconnect:
+        pass
+
+    except (OSError, asyncssh.Error, TimeoutError) as error:
+        print("Ошибка SSH:", error)
+        close_code = 1011
+        close_reason = "Не удалось открыть или сохранить SSH-сеанс"
+
+    finally:
+        if (
+            websocket.client_state == WebSocketState.CONNECTED
+            and websocket.application_state == WebSocketState.CONNECTED
+        ):
+            with suppress(WebSocketDisconnect):
+                await websocket.close(
+                    code=close_code,
+                    reason=close_reason,
+                )

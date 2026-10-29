@@ -5,3 +5,4 @@
 /.idea/
 /.venv-linux/
 /back/logs/
+__pycache__/

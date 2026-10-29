@@ -1,0 +1,118 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.dashboard {
+  max-width: 800px;
+  margin: 60px auto;
+  padding: 24px;
+}
+
+.vm-card {
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+}
+
+.vm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.vm-actions button {
+  min-height: 44px;
+  padding: 10px 18px;
+  background: #f1f5f9;
+  color: #1e293b;
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 2px 3px rgb(0 0 0 / 12%);
+  cursor: pointer;
+  transition: background-color 150ms, box-shadow 150ms, transform 150ms;
+}
+
+.vm-actions button:hover:not(:disabled) {
+  background: #e2e8f0;
+  box-shadow: 0 3px 6px rgb(0 0 0 / 18%);
+}
+
+.vm-actions button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.vm-actions button:focus-visible {
+  outline: 3px solid #60a5fa;
+  outline-offset: 3px;
+}
+
+.vm-actions .vm-button-primary {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+.vm-actions .vm-button-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.vm-actions .vm-button-danger {
+  background: #dc2626;
+  border-color: #b91c1c;
+  color: #fff;
+}
+
+.vm-actions .vm-button-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.vm-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vm-actions button {
+    transition: none;
+  }
+}
+
+.vm-terminal {
+  margin-top: 24px;
+  padding: 16px;
+  overflow-x: auto;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 12px;
+}

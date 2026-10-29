@@ -1,3 +1,4 @@
 fastapi
 qemu.qmp
 uvicorn[standard]
+asyncssh
