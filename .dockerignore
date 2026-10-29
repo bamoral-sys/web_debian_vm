@@ -1,0 +1,14 @@
+.git
+.idea
+.venv
+.venv-linux
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/.next
+**/dist
+images
+keys
+back/logs
+output
+cloud-init/user-data
