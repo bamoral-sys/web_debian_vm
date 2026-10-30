@@ -1,145 +1,49 @@
-## Требования
+1. Подготовьте программы
 
-- Ubuntu/Debian на x86_64 или Ubuntu в WSL2 на Windows.
-- Bash и sudo для установки зависимостей.
-- Не менее 2 ГБ свободной оперативной памяти для VM и место для образов. Виртуальный диск имеет размер 10 ГБ; qcow2 занимает место по мере записи.
+Нужны установленный и запущенный Docker Engine, Git и инструменты подготовки образа:
+sudo apt-get update
+sudo apt-get install -y git curl ca-certificates qemu-utils cloud-image-utils openssh-cli
 
-Все команды ниже выполняются в терминале ubuntu через WSL для Windows
+2. Склонируйте репозиторий
+git clone https://github.com/bamoral-sys/web_debian_vm.git
+cd web_debian_vm
 
-Установка зависимостей:
+3. Создайте SSH-ключ
+mkdir -p keys back/logs
 
-```bash
-sudo apt update
-sudo apt install -y \
-  curl ca-certificates qemu-utils qemu-system-x86 \
-  cloud-image-utils openssh-client
-```
+if [ ! -f keys/vm_ed25519 ]; then
+  ssh-keygen -t ed25519 -N "" -f keys/vm_ed25519 -C vmadmin
+fi
 
-## Структура проекта
+chmod 600 keys/vm_ed25519
+touch keys/known_hosts
 
-```text
-scripts/
-  prepare-image.sh      # Скачивание и подготовка дисков
-  boot.sh               # Запуск QEMU
-cloud-init/
-  user-data             # Пользователь и SSH; создаётся скриптом
-  meta-data             # Идентификатор VM; создаётся скриптом
-  network-config        # DHCP для сетевой карты; создаётся скриптом
-images/
-  vm.qcow2              # Рабочий диск VM
-  seed.img              # Конфигурационный диск cloud-init
-keys/
-  vm_ed25519            # Приватный ключ; не публиковать
-  vm_ed25519.pub        # Публичный ключ
-```
-
-## 1. Перейти в проект
-
-## 2. Создать SSH-ключ
-
-Выполняется один раз. Если ключ уже существует, используйте его и не перезаписывайте.
-
-```bash
-mkdir -p keys
-ssh-keygen -t ed25519 -f keys/vm_ed25519 -C "vm-admin"
-```
-
-Если проект размещён на диске Windows (как в моём случае), OpenSSH в WSL может видеть права приватного ключа как 0777. Создайте копию в домашнем каталоге Ubuntu:
-
-```bash
-mkdir -p ~/.ssh
-chmod 700 ~/.ssh
-cp keys/vm_ed25519 ~/.ssh/debian_vm_ed25519
-chmod 600 ~/.ssh/debian_vm_ed25519
-```
-
-Для дальнейших подключений используется эта копия ключа. Она должна соответствовать публичному ключу, с которым подготовлена VM.
-
-## 3. Подготовить образ
-
-Из корня проекта:
-
-```bash
+4. Подготовьте диск Debian
 bash scripts/prepare-image.sh
-```
 
-Скрипт:
+5. Соберите Docker-образы
+docker build -f Dockerfile.backend -t debian-vm-backend .
 
-1. Скачивает образ `debian-13-genericcloud-amd64-20261001-2618.qcow2`
-2. Проверяет SHA-512 по скачанному SHA512SUMS.
-3. Создаёт самостоятельный рабочий диск `images/vm.qcow2` и увеличивает его виртуальный размер до 10 ГБ.
-4. Создаёт конфигурацию пользователя `vmadmin`, входа по SSH-ключу и DHCP.
-5. Упаковывает настройки в `images/seed.img` и проверяет структуру qcow2.
+docker build \
+  -f frontend/web_debian_vm/Dockerfile.frontend \
+  -t debian-vm-frontend \
+  frontend/web_debian_vm
 
-Источник: https://cloud.debian.org/images/cloud/trixie/20261001-2618/
+6. Запустите backend
+docker run -d --rm --init \
+  --name debian-vm-backend \
+  -p 127.0.0.1:8000:8000 \
+  --mount "type=bind,source=$(pwd)/images,target=/app/images" \
+  --mount "type=bind,source=$(pwd)/back/logs,target=/app/back/logs" \
+  --mount "type=bind,source=$(pwd)/keys,target=/run/ssh,readonly" \
+  -e VM_SSH_KEY=/run/ssh/vm_ed25519 \
+  -e VM_KNOWN_HOSTS=/run/ssh/known_hosts \
+  debian-vm-backend
 
-Если `vm.qcow2` или `seed.img` уже существует, скрипт завершится с ошибкой, чтобы не перезаписать данные. Для обычного повторного запуска подготовка образа не нужна.
+7. Запустите frontend
+docker run -d --rm --init \
+  --name debian-vm-frontend \
+  -p 127.0.0.1:3000:3000 \
+  debian-vm-frontend
 
-Пользователь `vmadmin` имеет sudo без пароля. SSH-вход по паролю отключён; пароль пользователя заблокирован.
-
-## 4. Запустить VM
-
-Важно: текущий `boot.sh` использует пути `../images/...`, поэтому запускайте его именно из каталога `scripts`:
-
-```bash
-cd scripts
-bash boot.sh
-```
-
-Параметры VM:
-
-| Параметр | Значение |
-| --- | --- |
-| Оперативная память | 2048 МБ |
-| Виртуальные процессоры | 2 |
-| Ускорение | TCG, программная эмуляция |
-| Диск | vm.qcow2 через VirtIO |
-| Сеть | NAT QEMU, получение адреса по DHCP |
-| MAC | 52:54:00:12:34:56 |
-| SSH | 127.0.0.1:2222 на Ubuntu → порт 22 в VM |
-
-При первой загрузке cloud-init настраивает пользователя, сеть, SSH и расширение файловой системы. Это может занять несколько минут.
-
-## 5. Подключиться по SSH
-
-Откройте второй терминал в той же Ubuntu/WSL, где работает QEMU:
-
-```bash
-ssh -i ~/.ssh/debian_vm_ed25519 -p 2222 vmadmin@127.0.0.1
-```
-
-## 6. Работа с serial-консолью
-
-В терминале QEMU:
-
-- Ctrl+A, затем C — переключение между serial-консолью и текстовым монитором QEMU.
-- Ctrl+A, затем H — справка по сочетаниям.
-
-Монитор здесь использует HMP; QMP-подключение текущим скриптом не создаётся.
-
-Для входа через приглашение `login:` сначала задайте пароль из SSH-сессии:
-
-```bash
-sudo passwd vmadmin
-```
-
-После этого используйте логин `vmadmin` и установленный пароль в serial-консоли. При вводе пароля символы не отображаются. SSH-вход по паролю остаётся отключённым.
-
-## 7. Перезагрузка и выключение
-
-Внутри Debian через SSH:
-
-```bash
-# Перезагрузить VM
-sudo reboot
-```
-
-```bash
-sudo poweroff
-```
-
-Повторный запуск выполняется из каталога `scripts`:
-
-```bash
-./boot.sh
-```
+фронтенд будет доступен по адресу http://localhost:3000
