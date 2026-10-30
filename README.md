@@ -19,11 +19,11 @@ cd web_debian_vm
 ```bash
 mkdir -p keys back/logs
 
-if [ ! -f keys/vm_ed25519 ]; then
-  ssh-keygen -t ed25519 -N "" -f keys/vm_ed25519 -C vmadmin
+if [ ! -f keys/debian_vm_ed25519 ]; then
+  ssh-keygen -t ed25519 -N "" -f keys/debian_vm_ed25519 -C vmadmin
 fi
 
-chmod 600 keys/vm_ed25519
+chmod 600 keys/debian_vm_ed25519
 touch keys/known_hosts
 ```
 
@@ -53,7 +53,7 @@ docker run -d --rm --init \
   --mount "type=bind,source=$(pwd)/images,target=/app/images" \
   --mount "type=bind,source=$(pwd)/back/logs,target=/app/back/logs" \
   --mount "type=bind,source=$(pwd)/keys,target=/run/ssh,readonly" \
-  -e VM_SSH_KEY=/run/ssh/vm_ed25519 \
+  -e VM_SSH_KEY=/run/ssh/debian_vm_ed25519 \
   -e VM_KNOWN_HOSTS=/run/ssh/known_hosts \
   debian-vm-backend
 ```
@@ -68,3 +68,11 @@ docker run -d --rm --init \
 ```
 
 фронтенд будет доступен по адресу [http://localhost:3000](http://localhost:3000)
+
+## P.S.
+Если в терминале вечно идёт подключение к ssh дольше минуты, то попробуйте добавить ключ в known_hosts
+```bash
+host_key=$(docker exec debian-vm-backend python -c \
+"import asyncio, asyncssh; key = asyncio.run(asyncio.wait_for(asyncssh.get_server_host_key('127.0.0.1', port=2222, server_host_key_algs=['ssh-ed25519']), timeout=15)); print('[127.0.0.1]:2222 ' + key.export_public_key().decode().strip())") \
+  && printf '%s\n' "$host_key" > keys/known_hosts
+  ```

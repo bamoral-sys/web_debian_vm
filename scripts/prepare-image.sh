@@ -9,8 +9,8 @@ IMAGE="debian-13-genericcloud-amd64-20261001-2618.qcow2"
 
 mkdir -p images cloud-init
 
-if [[ ! -f keys/vm_ed25519.pub ]]; then
-  echo "Отсутствует SSH-ключ: keys/vm_ed25519.pub" >&2
+if [[ ! -f keys/debian_vm_ed25519.pub ]]; then
+  echo "Отсутствует SSH-ключ: keys/debian_vm_ed25519.pub" >&2
   exit 1
 fi
 
@@ -40,7 +40,7 @@ qemu-img convert -f qcow2 -O qcow2 \
 
 qemu-img resize images/vm.qcow2 10G
 
-PUBLIC_KEY="$(cat keys/vm_ed25519.pub)"
+PUBLIC_KEY="$(cat keys/debian_vm_ed25519.pub)"
 
 cat > cloud-init/user-data <<EOF
 #cloud-config
