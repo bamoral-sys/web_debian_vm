@@ -4,7 +4,7 @@
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git curl ca-certificates qemu-utils cloud-image-utils openssh-cli
+sudo apt-get install -y git curl ca-certificates qemu-utils cloud-image-utils openssh-client
 ```
 
 ## 2. Склонируйте репозиторий
