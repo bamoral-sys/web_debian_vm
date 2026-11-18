@@ -1,5 +1,6 @@
 import asyncssh
 import asyncio
+import logging
 
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -14,6 +15,8 @@ from back.app.serial_bridge import serial_to_websocket, websocket_to_serial
 
 from back.app.ssh_client import connect_ssh
 from back.app.ssh_bridge import bridge_ssh
+
+logger = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
@@ -221,8 +224,23 @@ async def vm_ssh(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
 
-    except (OSError, asyncssh.Error, TimeoutError) as error:
-        print("Ошибка SSH:", error)
+    except asyncssh.HostKeyNotVerifiable as error:
+        logger.error("SSH host key verification failed: %r", error)
+        close_code = 1008
+        close_reason = "Проверьте ключ сервера в known_hosts"
+
+    except (asyncssh.PermissionDenied, asyncssh.KeyImportError, FileNotFoundError) as error:
+        logger.error("SSH credentials unavailable or rejected: %r", error)
+        close_code = 1008
+        close_reason = "Проверьте SSH-ключи и known_hosts"
+
+    except TimeoutError:
+        logger.warning("SSH session failed (TimeoutError): guest did not respond in time")
+        close_code = 1011
+        close_reason = "ВМ не ответила по SSH вовремя"
+
+    except (OSError, asyncssh.Error) as error:
+        logger.warning("SSH session failed (%s): %r", type(error).__name__, error)
         close_code = 1011
         close_reason = "Не удалось открыть или сохранить SSH-сеанс"
 

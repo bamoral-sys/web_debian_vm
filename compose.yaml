@@ -1,0 +1,69 @@
+services:
+  vm-init:
+    image: debian:trixie-slim
+    working_dir: /workspace
+
+    volumes:
+      - ./scripts:/workspace/scripts:ro
+      - ./keys:/workspace/keys
+      - ./images:/workspace/images
+      - ./cloud-init:/workspace/cloud-init
+      - ./back/logs:/workspace/back/logs
+
+    command:
+      - /bin/bash
+      - -c
+      - |
+        set -e
+        apt-get update
+        apt-get install -y --no-install-recommends \
+          ca-certificates \
+          curl \
+          openssh-client \
+          qemu-utils \
+          cloud-image-utils
+        exec bash scripts/init.sh
+
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+
+    image: debian-vm-backend
+    init: true
+
+    ports:
+      - "127.0.0.1:8000:8000"
+
+    volumes:
+      - ./images:/app/images
+      - ./back/logs:/app/back/logs
+      - ./keys:/run/ssh:ro
+
+    environment:
+      VM_SSH_KEY: /run/ssh/debian_vm_ed25519
+      VM_KNOWN_HOSTS: /run/ssh/known_hosts
+
+    depends_on:
+      vm-init:
+        condition: service_completed_successfully
+
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend/web_debian_vm
+      dockerfile: Dockerfile.frontend
+
+    image: debian-vm-frontend
+    init: true
+
+    ports:
+      - "127.0.0.1:3000:3000"
+
+    depends_on:
+      - backend
+
+    restart: unless-stopped

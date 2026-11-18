@@ -1,78 +1,34 @@
-## 1. Подготовьте программы
+## Запуск
 
-Нужны установленный и запущенный Docker Engine, Git и инструменты подготовки образа:
+Понадобится запущенный Docker Engine с Docker Compose и поддержкой Linux-контейнеров.
 
-```bash
-sudo apt-get update
-sudo apt-get install -y git curl ca-certificates qemu-utils cloud-image-utils openssh-client
-```
-
-## 2. Склонируйте репозиторий
-
-```bash
+```sh
 git clone https://github.com/bamoral-sys/web_debian_vm.git
 cd web_debian_vm
+docker compose up -d --build
 ```
 
-## 3. Создайте SSH-ключ
+Откройте [http://localhost:3000](http://localhost:3000) и включите ВМ. Первый запуск может занять несколько минут. При временной недоступности SSH терминал повторяет подключение.
 
-```bash
-mkdir -p keys back/logs
+`vm-init` создаёт клиентский ключ для `vmadmin`, готовит диск Debian и NoCloud seed. Для новой ВМ он заранее создаёт отдельный ключ сервера и записывает его публичную часть в `keys/known_hosts` для `[127.0.0.1]:2222`. Backend запускается после успешного завершения `vm-init` и читает ключи из каталога, подключённого только для чтения. QEMU пробрасывает гостевой порт 22 на loopback внутри backend.
 
-if [ ! -f keys/debian_vm_ed25519 ]; then
-  ssh-keygen -t ed25519 -N "" -f keys/debian_vm_ed25519 -C vmadmin
-fi
+Храните `images/seed.img` и `images/vm.qcow2` в закрытом каталоге. Они содержат приватный ключ SSH-сервера. Каталог `keys` содержит клиентский приватный ключ.
 
-chmod 600 keys/debian_vm_ed25519
-touch keys/known_hosts
+## Диагностика SSH
+
+```sh
+docker compose ps -a
+docker compose logs vm-init backend
 ```
 
-## 4. Подготовьте диск Debian
+При тайм-ауте на первой загрузке дайте гостю завершить cloud-init. Лог запуска QEMU находится в `back/logs/qemu.log`. В работающем госте журналы cloud-init доступны в `/var/log/cloud-init.log` и `/var/log/cloud-init-output.log`.
 
-```bash
-bash scripts/prepare-image.sh
+Для диска, созданного до автоматической настройки доверия, возьмите ключ из самого гостя через доверенную консоль с доступом к системе или из диска, смонтированного только для чтения при выключенной ВМ. Используйте публичный ключ из `/etc/ssh/ssh_host_ed25519_key.pub`. Проверьте, что он принадлежит нужной ВМ, и внесите в `keys/known_hosts` строку вида:
+
+```text
+[127.0.0.1]:2222 ssh-ed25519 <публичный ключ в base64>
 ```
 
-## 5. Соберите Docker-образы
+После исправления записи обновите страницу. При ошибке аутентификации проверьте, что публичный ключ `keys/debian_vm_ed25519.pub` есть в `~vmadmin/.ssh/authorized_keys` внутри гостя.
 
-```bash
-docker build -f Dockerfile.backend -t debian-vm-backend .
-
-docker build \
-  -f frontend/web_debian_vm/Dockerfile.frontend \
-  -t debian-vm-frontend \
-  frontend/web_debian_vm
-```
-
-## 6. Запустите backend
-
-```bash
-docker run -d --rm --init \
-  --name debian-vm-backend \
-  -p 127.0.0.1:8000:8000 \
-  --mount "type=bind,source=$(pwd)/images,target=/app/images" \
-  --mount "type=bind,source=$(pwd)/back/logs,target=/app/back/logs" \
-  --mount "type=bind,source=$(pwd)/keys,target=/run/ssh,readonly" \
-  -e VM_SSH_KEY=/run/ssh/debian_vm_ed25519 \
-  -e VM_KNOWN_HOSTS=/run/ssh/known_hosts \
-  debian-vm-backend
-```
-
-## 7. Запустите frontend
-
-```bash
-docker run -d --rm --init \
-  --name debian-vm-frontend \
-  -p 127.0.0.1:3000:3000 \
-  debian-vm-frontend
-```
-
-фронтенд будет доступен по адресу [http://localhost:3000](http://localhost:3000)
-
-## P.S.
-Если в терминале вечно идёт подключение к ssh дольше минуты, то попробуйте добавить ключ в known_hosts
-```bash
-host_key=$(docker exec debian-vm-backend python -c \
-"import asyncio, asyncssh; key = asyncio.run(asyncio.wait_for(asyncssh.get_server_host_key('127.0.0.1', port=2222, server_host_key_algs=['ssh-ed25519']), timeout=15)); print('[127.0.0.1]:2222 ' + key.export_public_key().decode().strip())") \
-  && printf '%s\n' "$host_key" > keys/known_hosts
-  ```
+Кнопка перезагрузки выполняет аппаратный сброс через QMP `system_reset`.

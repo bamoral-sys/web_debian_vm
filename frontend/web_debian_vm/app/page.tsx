@@ -75,7 +75,7 @@ export function VmTerminal() {
           }
 
           terminal.writeln(
-            '\r\nSSH недоступен. Повторная попытка через 3 секунды…'
+            `\r\n${event.reason || 'SSH недоступен'}. Повтор через 3 секунды…`
           );
           retryTimer = setTimeout(connectSocket, 3000);
         };

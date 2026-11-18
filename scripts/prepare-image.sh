@@ -19,6 +19,10 @@ if [[ -e images/vm.qcow2 || -e images/seed.img ]]; then
   exit 1
 fi
 
+rm -f "images/$IMAGE"
+rm -f images/SHA512SUMS
+rm -f images/selected.sha512
+
 curl --fail --location --retry 3 \
   "$BASE_URL/$IMAGE" -o "images/$IMAGE"
 
@@ -35,14 +39,19 @@ curl --fail --location --retry 3 \
   sha512sum --check selected.sha512
 )
 
-qemu-img convert -f qcow2 -O qcow2 \
-  "images/$IMAGE" images/vm.qcow2
+umask 077
+work_dir="$(mktemp -d images/.prepare.XXXXXX)"
+trap 'rm -rf -- "$work_dir"' EXIT
+ssh-keygen -q -t ed25519 -N "" -C debian-vm -f "$work_dir/host_key"
 
-qemu-img resize images/vm.qcow2 10G
+qemu-img convert -f qcow2 -O qcow2 \
+  "images/$IMAGE" "$work_dir/vm.qcow2"
+qemu-img resize "$work_dir/vm.qcow2" 10G
+qemu-img check "$work_dir/vm.qcow2"
 
 PUBLIC_KEY="$(cat keys/debian_vm_ed25519.pub)"
 
-cat > cloud-init/user-data <<EOF
+cat > "$work_dir/user-data" <<EOF
 #cloud-config
 hostname: debian-vm
 manage_etc_hosts: true
@@ -58,6 +67,11 @@ users:
 
 disable_root: true
 ssh_pwauth: false
+ssh_deletekeys: true
+ssh_keys:
+  ed25519_public: $(cat "$work_dir/host_key.pub")
+  ed25519_private: |
+$(sed 's/^/    /' "$work_dir/host_key")
 
 package_update: true
 packages:
@@ -89,10 +103,15 @@ EOF
 
 cloud-localds \
   --network-config=cloud-init/network-config \
-  images/seed.img \
-  cloud-init/user-data \
+  "$work_dir/seed.img" \
+  "$work_dir/user-data" \
   cloud-init/meta-data
 
-qemu-img check images/vm.qcow2
+known_hosts="$(mktemp keys/.known_hosts.XXXXXX)"
+printf '[127.0.0.1]:2222 %s\n' "$(cat "$work_dir/host_key.pub")" > "$known_hosts"
+mv -f -- "$known_hosts" keys/known_hosts
+chmod 600 "$work_dir/seed.img"
+mv -- "$work_dir/seed.img" images/seed.img
+mv -- "$work_dir/vm.qcow2" images/vm.qcow2
 
 echo "Done: images/vm.qcow2 и images/seed.img"
